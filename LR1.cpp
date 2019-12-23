@@ -26,24 +26,26 @@ struct Production {
     }
 };
 
-/* LR0项目 */
-struct LR0Item {
+/* LR1项目 */
+struct LR1Item {
     Production p;
     /* 点的位置 */
     int location;
+    /* 向前看符号 */
+    char next;
 };
 
-/* LR0项目集 */
-struct LR0Items {
-    vector<LR0Item> items;
+/* LR1项目集 */
+struct LR1Items {
+    vector<LR1Item> items;
 };
 
 /* LR1项目集规范族 */
 struct CanonicalCollection {
     /* 项目集集合 */
-    vector<LR0Items> items;
+    vector<LR1Items> items;
     /* 保存DFA的图，first为转移到的状态序号，second是经什么转移 */
-    vector< pair<int, char> > g[30];
+    vector< pair<int, char> > g[100];
 }CC;
 
 /* 文法结构体 */
@@ -59,11 +61,11 @@ map<char, set<char> > first;
 map<char, set<char> > follow;
 
 /* DFA队列， 用于存储待转移的有效项目集 */
-queue< pair<LR0Items, int> > Q;
+queue< pair<LR1Items, int> > Q;
 
 /* action表和goto表 */
-pair<int, int> action[20][20]; // first表示分析动作，0->ACC 1->S 2->R second表示转移状态或者产生式序号
-int goton[20][20];
+pair<int, int> action[100][100]; // first表示分析动作，0->ACC 1->S 2->R second表示转移状态或者产生式序号
+int goton[100][100];
 
 /* 待分析串 */
 string str;
@@ -197,91 +199,23 @@ void getFirstByAlphaSet(vector<char> &alpha, set<char> &FS)
         FS.insert('&');
     }
 }
-/* 求非终结符的FOLLOW集 */
-void getFollowSet()
-{
-    /* 初始化终结符的FOLLOW集为空集 */
-    for (int i = 0; i < grammar.N.size(); i++) {
-        char B = grammar.N[i];
-        follow[B] = set<char>();
-    }
-    /* 将$加入到文法的开始符号的FOLLOW集中 */
-    char S = grammar.N[0];
-    follow[S].insert('$');
 
-    bool change = true;
-    while (change) {
-        change = false;
-        /* 枚举每个产生式 */
-        for (int i = 0; i < grammar.prods.size(); i++) {
-            Production &P = grammar.prods[i];
-            for (int j = 0; j < P.rigths.size(); j++) {
-                char B = P.rigths[j];
-                /* 当前符号是非终结符 */
-                if (isInN(B)) {
-                    set<char> &FB = follow[B];
-                    set<char> FS;
-                    /* alpha是从当前符号下一个符号开始的符号串 */
-                    vector<char> alpha(P.rigths.begin() + j + 1, P.rigths.end());
-                    /* 求alpha的FIRST集，即FS */
-                    getFirstByAlphaSet(alpha, FS);
-                    // printf("%c:\n", B);
-                    /* 将alpha的FIRST集中所有非空元素加入到当前符号的FOLLOW集中 */
-                    for (auto it = FS.begin(); it != FS.end(); it++) {
-                        // printf("%c ", *it);
-                        if (*it == '&') {
-                            continue;
-                        }
-                        auto itt = FB.find(*it);
-                        if (itt == FB.end()) {
-                            change = true;
-                            FB.insert(*it);
-                        }
-                    }
-                    // printf("\n");
-                    /* 如果alpha能推空，或者当前符号是产生式右部末尾，则将文法左部符号的FOLLOW集加入到当前符号的FOLLOW集中 */
-                    auto itt = FS.find('&');
-                    if (itt != FS.end() || (j + 1) >= P.rigths.size()) {
-                        char A = P.left;
-                        for (auto it = follow[A].begin(); it != follow[A].end(); it++) {
-                            auto itt = FB.find(*it);
-                            if (itt == FB.end()) {
-                                change = true;
-                                FB.insert(*it);
-                            }
-                        }    
-                    }
-                }
-            }
-        }
-    }
-
-    printf("FOLLOW:\n");
-    for (int i = 0; i < grammar.N.size(); i++) {
-        char X = grammar.N[i];
-        printf("%c: ", X);
-        for (auto it = follow[X].begin(); it != follow[X].end(); it++) {
-            printf("%c ", *it);
-        }
-        printf("\n");
-    }
-}
-/* 判断是LR0项目t否在有效项目集I中 */
-bool isInLR0Items(LR0Items &I, LR0Item &t)
+/* 判断是LR1项目t否在有效项目集I中 */
+bool isInLR1Items(LR1Items &I, LR1Item &t)
 {
     for (auto it = I.items.begin(); it != I.items.end(); it++) {
-        LR0Item &item = *it;
-        if (item.p == t.p && item.location == t.location) 
+        LR1Item &item = *it;
+        if (item.p == t.p && item.location == t.location && item.next == t.next)
             return true;
     }
     return false;
 }
 
 /* 打印某个项目集 */
-void printLR0Items(LR0Items &I)
+void printLR1Items(LR1Items &I)
 {
     for (auto it = I.items.begin(); it != I.items.end(); it++) {
-        LR0Item &L = *it;
+        LR1Item &L = *it;
         printf("%c->", L.p.left);
         for (int i = 0; i < L.p.rigths.size(); i++) {
             if (L.location == i)
@@ -290,39 +224,52 @@ void printLR0Items(LR0Items &I)
         }
         if (L.location == L.p.rigths.size())
             printf(".");
-        printf(" ");
+        printf(",%c   ", L.next);
     }
     printf("\n");
 }
 
 /* 求I的闭包 */
-void closure(LR0Items &I)
+void closure(LR1Items &I)
 {
     bool change =  true;
     while (change) {
         change = false;
-        LR0Items J;
+        LR1Items J;
         /* 枚举每个项目 */
         J.items.assign(I.items.begin(), I.items.end());
         for (auto it = J.items.begin(); it != J.items.end(); it++) {
-            LR0Item &L = *it;
+            LR1Item &L = *it;
             /* 非规约项目 */
             if (L.location < L.p.rigths.size()) {
                 char B = L.p.rigths[L.location];
                 if (isInN(B)) {
-                    /* 把符合条件的LR0项目加入闭包中 */
+                    /* 把符合条件的LR1项目加入闭包中 */
+                   
+                    /* 先求出B后面的FIRST集 */
+                    set<char> FS;
+                    vector<char> alpha;
+                    alpha.assign(L.p.rigths.begin() + L.location + 1, L.p.rigths.end());
+                    alpha.push_back(L.next);
+                    getFirstByAlphaSet(alpha, FS);
+
                     for (int i = 0; i < grammar.prods.size(); i++) {
                         Production &P = grammar.prods[i];
                         if (P.left == B) {
-                            LR0Item t;
-                            t.location = 0;
-                            t.p.left = P.left;
-                            t.p.rigths.assign(P.rigths.begin(), P.rigths.end());
-                            if (!isInLR0Items(I, t)) {
-                                /* 标记改变 */
-                                change = true;
-                                I.items.push_back(t);
-                            } 
+                            /* 枚举每个b in B后面的FIRST集 */
+                            for (auto it = FS.begin(); it != FS.end(); it++) {
+                                char b = *it;
+                                LR1Item t;
+                                t.location = 0;
+                                t.next = b;
+                                t.p.left = P.left;
+                                t.p.rigths.assign(P.rigths.begin(), P.rigths.end());
+                                if (!isInLR1Items(I, t)) {
+                                    /* 标记改变 */
+                                    change = true;
+                                    I.items.push_back(t);
+                                } 
+                            }
                         } 
                     }
                 }
@@ -331,10 +278,10 @@ void closure(LR0Items &I)
     }
 }
 /* 判断是否在项目集规范族中，若在返回序号 */
-int isInCanonicalCollection(LR0Items &I)
+int isInCanonicalCollection(LR1Items &I)
 {
     for (int i = 0; i < CC.items.size(); i++) {
-        LR0Items &J = CC.items[i];
+        LR1Items &J = CC.items[i];
         bool flag = true;
         if (J.items.size() != I.items.size()) {
             flag = false;
@@ -342,8 +289,8 @@ int isInCanonicalCollection(LR0Items &I)
         }
         /* 每个项目都在该项目集中，则认为这个两个项目集相等 */
         for (auto it = I.items.begin(); it != I.items.end(); it++) {
-            LR0Item &t = *it;
-            if (!isInLR0Items(J, t)) {
+            LR1Item &t = *it;
+            if (!isInLR1Items(J, t)) {
                 flag = false;
                 break;
             }
@@ -356,17 +303,18 @@ int isInCanonicalCollection(LR0Items &I)
 }
 
 /* 转移函数，I为当前的项目集，J为转移后的项目集, 经X转移 */
-void go(LR0Items &I, char X, LR0Items &J)
+void go(LR1Items &I, char X, LR1Items &J)
 {
     for (auto it = I.items.begin(); it != I.items.end(); it++) {
-        LR0Item &L = *it;
+        LR1Item &L = *it;
         /* 非规约项目 */
         if (L.location < L.p.rigths.size()) {
             char B = L.p.rigths[L.location];
             /* 如果点后面是非终结符，且非终结符为X，点位置加1, 加入到转移项目集中*/
             if (B == X) {
-                LR0Item t;
+                LR1Item t;
                 t.location = L.location + 1;
+                t.next = L.next;
                 t.p.left = L.p.left;
                 t.p.rigths.assign(L.p.rigths.begin(), L.p.rigths.end());
                 J.items.push_back(t);
@@ -383,23 +331,24 @@ void go(LR0Items &I, char X, LR0Items &J)
 void DFA()
 {
     /* 构建初始项目集 */
-    LR0Item t;
+    LR1Item t;
     t.location = 0;
+    t.next = '$';
     t.p.left = grammar.prods[0].left;
     t.p.rigths.assign(grammar.prods[0].rigths.begin(), grammar.prods[0].rigths.end());
-    LR0Items I;
+    LR1Items I;
     I.items.push_back(t);
     closure(I);
     /* 加入初始有效项目集 */
     CC.items.push_back(I);
     /* 把新加入的有效项目集加入待扩展队列中 */
-    Q.push(pair<LR0Items, int>(I, 0));
+    Q.push(pair<LR1Items, int>(I, 0));
     while (!Q.empty()) {
-        LR0Items &S = Q.front().first;
+        LR1Items &S = Q.front().first;
         int sidx = Q.front().second;
         /* 遍历每个终结符 */
         for (int i = 0; i  < grammar.T.size(); i++) {
-            LR0Items D;
+            LR1Items D;
             go(S, grammar.T[i], D);
             int idx;
             /* 若不为空 */
@@ -412,7 +361,7 @@ void DFA()
                     idx = CC.items.size();
                     CC.items.push_back(D);
                     /* 把新加入的有效项目集加入待扩展队列中 */
-                    Q.push(pair<LR0Items, int>(D, idx));
+                    Q.push(pair<LR1Items, int>(D, idx));
                 }
                 /* 从原状态到转移状态加一条边，边上的值为转移符号 */
                 CC.g[sidx].push_back(pair<char, int>(grammar.T[i], idx));
@@ -420,7 +369,7 @@ void DFA()
         }
         /* 遍历每个非终结符 */
         for (int i = 0; i  < grammar.N.size(); i++) {
-            LR0Items D;
+            LR1Items D;
             go(S, grammar.N[i], D);
             int idx;
             if (D.items.size() > 0) {
@@ -432,7 +381,7 @@ void DFA()
                     idx = CC.items.size();
                     CC.items.push_back(D);
                     /* 把新加入的有效项目集加入待扩展队列中 */
-                    Q.push(pair<LR0Items, int>(D, idx));
+                    Q.push(pair<LR1Items, int>(D, idx));
                 }
                 /* 从原状态到转移状态加一条边，边上的值为转移符号 */
                 CC.g[sidx].push_back(pair<char, int>(grammar.N[i], idx));
@@ -444,22 +393,22 @@ void DFA()
 
     printf("CC size: %d\n", CC.items.size());
     for (int i = 0; i < CC.items.size(); i++) {
-        printf("LR0Items %d:\n", i);
-        printLR0Items(CC.items[i]);
+        printf("LR1Items %d:\n", i);
+        printLR1Items(CC.items[i]);
         for (int j = 0; j < CC.g[i].size(); j++) {
             pair<char, int> p= CC.g[i][j];
             printf("to %d using %c\n", p.second, p.first);
         }
     }
 }
-/* 生成SLR1分析表 */
-void productSLR1AnalysisTabel()
+/* 生成LR1分析表 */
+void productLR1AnalysisTabel()
 {
     for (int i = 0; i < CC.items.size(); i++) {
-        LR0Items &LIt= CC.items[i];
+        LR1Items &LIt= CC.items[i];
         /* 构建action表 */
         for (auto it = LIt.items.begin(); it != LIt.items.end(); it++) {
-            LR0Item &L = *it;
+            LR1Item &L = *it;
             /* 非规约项目 */
             if (L.location < L.p.rigths.size()) {
                 char a = L.p.rigths[L.location];
@@ -480,24 +429,20 @@ void productSLR1AnalysisTabel()
             } else { // 规约项目
                 /* 接受项目 */
                 if (L.p.left == grammar.prods[0].left) {
-                    action[i][grammar.T.size() - 1].first = 3;
+                    if (L.next == '$')
+                        action[i][grammar.T.size() - 1].first = 3;
                 } else {
-                    char A = L.p.left;
-                    for (auto a = follow[A].begin(); a != follow[A].end(); a++) {
-                        int j = isInT(*a);
-                        /* 终结符 */
-                        if (j > 0) {
-                            j = j - 1;
-                            /* 找到产生式对应的序号 */
-                            for (int k = 0; k < grammar.prods.size(); k++) {
-                                if (L.p == grammar.prods[k]) {
-                                    action[i][j].first = 2;
-                                    action[i][j].second = k;
-                                    break;
-                                }
-                            }
+                    /* 终结符 */
+                    int  j = isInT(L.next) - 1;
+                    /* 找到产生式对应的序号 */
+                    for (int k = 0; k < grammar.prods.size(); k++) {
+                        if (L.p == grammar.prods[k]) {
+                            action[i][j].first = 2;
+                            action[i][j].second = k;
+                            break;
                         }
                     }
+
                 }
             }
         }
@@ -513,7 +458,7 @@ void productSLR1AnalysisTabel()
             }
         }
     }
-    /* 打印SLR1分析表 */
+    /* 打印LR1分析表 */
     for (int i = 0; i < grammar.T.size() / 2; i++)
         printf("\t");
     printf("action");
@@ -586,13 +531,12 @@ void initGrammar()
     }
     /* 把$当作终结符 */
     grammar.T.push_back('$');
-    /* 求FIRST集和FOLLOW集 */
+    /* 求FIRST集 */
     getFirstSet();
-    getFollowSet();
 
     /* 构建DFA和SLR1预测分析表 */
     DFA();
-    productSLR1AnalysisTabel();
+    productLR1AnalysisTabel();
     
     /* 读入待分析串并初始化分析栈 */
     printf("Please enter the String to be analyzed:\n");

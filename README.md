@@ -12,9 +12,9 @@
 
 ## 综述
 
-共实现了两种语法分析程序，即LL(1)和LR(使用SLR(1)分析表)语法分析程序，对满足条件的输入文法能够自动的生成该文法的语法分析程序并执行分析过程，输出所采用的产生式。
+共实现了三种语法分析程序，即LL1、SLR1和LR1语法分析程序，对满足条件的输入文法能够自动的生成该文法的语法分析程序并执行分析过程，输出所采用的产生式。
 
-对于LL(1)语法分析程序有以下功能（要求输入文法为LL(1)文法）
+对于LL1语法分析程序有以下功能（要求输入文法为LL1文法）
 
 - 自动构建FIRST集
 - 自动构建FOLLOW集
@@ -22,18 +22,30 @@
 - 执行分析程序分析输入串
 - 输出所采用的产生式
 
-对于LR分析程序有以下功能（要求输入文法为SLR(1)文法）
+对于SLR1分析程序有以下功能（要求输入文法为SLR1文法）
 
 - 自动构建FIRST集
 - 自动构建FOLLOW集
 - 自动构建有效项目集规范族和DFA
-- 自动构建SLR(1)分析表
+- 自动构建SLR1分析表
+- 执行分析程序分析输入串
+- 输出所采用的产生式
+
+对于LR1分析程序有以下功能（要求输入文法为LR1文法）
+
+- 自动构建FIRST集
+- 自动构建有效项目集规范族和DFA
+- 自动构建LR1分析表
 - 执行分析程序分析输入串
 - 输出所采用的产生式
 
 
 
-## LL(1)语法分析程序
+三种语法分析程序均要求输入的文法符号为**单个**字符，请将原文法符号不是单个字符自行更换为单文法符号，如S'更换为A，id更换为n，以此类推。具体输入格式见每个程序测试部分的输入样例。
+
+
+
+## LL1语法分析程序
 
 ### 数据结构
 
@@ -382,9 +394,20 @@ n + - * / ( ) #
 
 ##### FIRST集和FOLLOW集
 
-![image-20191126151642423](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191126151642423.png)
-
-![image-20191126151658320](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191126151658320.png)
+```
+FIRST:
+E: ( n
+T: ( n
+A: & + -
+F: ( n
+B: & * /
+FOLLOW:
+E: $ )
+T: $ ) + -
+A: $ )
+F: $ ) * + - /
+B: $ ) + -
+```
 
 ##### 预测分析表
 
@@ -392,19 +415,43 @@ n + - * / ( ) #
 
 ##### 输出产生式
 
-![image-20191126151825463](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191126151825463.png)
+```
+The answer:
+E->TA
+T->FB
+F->(E)
+E->TA
+T->FB
+F->n
+B->&
+A->+TA
+T->FB
+F->n
+B->&
+A->&
+B->*FB
+F->n
+B->&
+A->-TA
+T->FB
+F->n
+B->/FB
+F->n
+B->&
+A->&
+```
 
-
+LL1输出**最左推导**，下面验证其正确性。
 
 E=>TA=>FBA=>(E)BA=>(TA)BA=>(FBA)BA=>(nBA)BA=>(nA)BA=>(n+TA)BA=>(n+FBA)BA=>(n+nBA)BA=>(n+nA)BA=>(n+n)BA=>(n+n)*FBA=>(n+n)\*nBA=>(n+n)\*nA=>(n+n)\*n-TA=>(n+n)\*n-FBA=>(n+n)\*n-nBA=>(n+n)\*n-n/FBA=>(n+n)\*n-n/nBA=>(n+n)\*n-n/nA=>(n+n)\*n-n/n
 
 可以看到，从输出的产生式可以**最左推导**出我们输入的分析串。
 
-经验证，上述所求的FIRST集、FOLLOW集、预测分析表和输出的产生式均正确。LL(1)语法分析程序工作正常。
+经验证，上述所求的FIRST集、FOLLOW集、预测分析表和输出的产生式均正确。LL1语法分析程序工作正常。
 
 
 
-## LR语法分析程序
+## SLR1语法分析程序
 
 
 
@@ -427,12 +474,12 @@ struct LR0Item {
 struct LR0Items {
     vector<LR0Item> items;
 };
-/* LR1项目集规范族 */
+/* LR0项目集规范族 */
 struct CanonicalCollection {
     /* 项目集集合 */
     vector<LR0Items> items;
     /* 保存DFA的图，first为转移到的状态序号，second是经什么转移 */
-    vector< pair<int, char> > g[30];
+    vector< pair<int, char> > g[100];
 }CC;
 
 /* 文法结构体 */
@@ -451,8 +498,8 @@ map<char, set<char> > follow;
 queue< pair<LR0Items, int> > Q;
 
 /* action表和goto表 */
-pair<int, int> action[20][20]; // first表示分析动作，0->ACC 1->S 2->R second表示转移状态或者产生式序号
-int goton[20][20];
+pair<int, int> action[100][100]; // first表示分析动作，0->ACC 1->S 2->R second表示转移状态或者产生式序号
+int goton[100][100];
 
 /* 待分析串 */
 string str;
@@ -762,13 +809,13 @@ void process()
 #### 编译源程序
 
 ```shell
-g++ -o LR LR.cpp
+g++ -o SLR1 SLR1.cpp
 ```
 
-#### 执行LR分析程序
+#### 执行SLR1分析程序
 
 ```
-.\LR.exe
+.\SLR1.exe
 ```
 
 输入以下内容
@@ -793,13 +840,20 @@ n + - * / ( ) #
 
 ##### FIRST和FOLLOW集
 
-![image-20191126190148676](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191126190148676.png)
+```
+FIRST:
+A: ( n 
+E: ( n 
+T: ( n 
+F: ( n 
+FOLLOW:
+A: $ 
+E: $ ) + - 
+T: $ ) * + - / 
+F: $ ) * + - / 
+```
 
 ##### 查看项目集规范族和DFA
-
-![image-20191126190321249](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191126190321249.png)
-
-完整内容如下：
 
 ```
 CC size: 16
@@ -878,7 +932,26 @@ T->T/F.
 
 ##### 查看输出产生式
 
-![image-20191126190507776](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191126190507776.png)
+```
+The ans:
+F->n
+T->F
+E->T
+F->n
+T->F
+E->E+T
+F->(E)
+T->F
+F->n
+T->T*F
+E->T
+F->n
+T->F
+F->n
+T->T/F
+E->E-T
+ACC
+```
 
 LR输出的产生式是最右推导的逆序列，下面验证其正确性。
 
@@ -888,3 +961,159 @@ E=>E-T=>E-T/F=>E-T/n=>E-F/n=>E-n/n=>T-n/n=>T*F-n/n=>T\*n-n/n=>F\*n-n/n=>(E)\*n-n
 
 经验证，程序自动构建的有效项目集规范族和DFA均正确，其分析表亦正确，对给定的输出串分析输出的产生式验证也正确。
 
+
+
+## LR1语法分析程序
+
+仅仅对上面的SLR1语法分析程序做出少量的修改即可实现LR1语法分析程序。
+
+### 添加向前看符号
+
+```cpp
+/* LR1项目 */
+struct LR1Item {
+    Production p;
+    /* 点的位置 */
+    int location;
+    /* 向前看符号 */
+    char next;
+};
+```
+
+
+
+### 修改相关函数
+
+#### 闭包
+
+![image-20191223184130454](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191223184130454.png)
+
+#### 转移函数
+
+![image-20191223184234241](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191223184234241.png)
+
+#### 构造分析表
+
+主要改动如下
+
+![image-20191223184521125](%E8%AF%AD%E6%B3%95%E5%88%86%E6%9E%90.assets/image-20191223184521125.png)
+
+上述函数的实现见源代码，相对于SLR1的改动不多。
+
+
+
+### 测试
+
+#### 编译源文件
+
+```shell
+g++ -o LR1 LR1.cpp
+```
+
+#### 执行LR1分析 程序
+
+```
+.\LR1.exe
+```
+
+输入一下内容(LR1有效项目集族状态 较多，此处给出一个状态相对较少的例子)
+
+```
+4
+A->S
+S->CC
+C->cC
+C->d
+A S C #
+c d #
+cccdcd
+```
+
+#### 查看输出结果
+
+##### FIRST集
+
+```
+FIRST:
+A: c d
+S: c d
+C: c d
+```
+
+##### 查看项目集规范族和DFA
+
+```
+CC size: 10
+LR1Items 0:
+A->.S,$   S->.CC,$   C->.cC,c   C->.cC,d   C->.d,c   C->.d,d
+to 1 using c
+to 2 using d
+to 3 using S
+to 4 using C
+LR1Items 1:
+C->c.C,c   C->c.C,d   C->.cC,c   C->.d,c   C->.cC,d   C->.d,d
+to 1 using c
+to 2 using d
+to 5 using C
+LR1Items 2:
+C->d.,c   C->d.,d
+LR1Items 3:
+A->S.,$
+LR1Items 4:
+S->C.C,$   C->.cC,$   C->.d,$
+to 6 using c
+to 7 using d
+to 8 using C
+LR1Items 5:
+C->cC.,c   C->cC.,d
+LR1Items 6:
+C->c.C,$   C->.cC,$   C->.d,$
+to 6 using c
+to 7 using d
+to 9 using C
+LR1Items 7:
+C->d.,$
+LR1Items 8:
+S->CC.,$
+LR1Items 9:
+C->cC.,$
+```
+
+##### 查看分析表
+
+```
+        action                  goto
+        c       d       $       |       S       C
+0       S1      S2              |       3       4
+1       S1      S2              |               5
+2       R3      R3              |
+3                       ACC     |
+4       S6      S7              |               8
+5       R2      R2              |
+6       S6      S7              |               9
+7                       R3      |
+8                       R1      |
+9                       R2      |
+```
+
+##### 查看输出产生式
+
+```
+The ans:
+C->d
+C->cC
+C->cC
+C->cC
+C->d
+C->cC
+S->CC
+ACC
+```
+
+LR输出的产生式是最右推导的逆序列，下面验证其正确性。
+
+S=>CC=>CcC=>Ccd=>cCcd=>ccCcd=>cccCcd=>cccdcd
+
+可以看出，上述产生式的确是**最右推导**的逆序列，所以其是正确的。
+
+经验证，程序自动构建的有效项目集规范族和DFA均正确，其分析表亦正确，对给定的输出串分析输出的产生式验证也正确。
